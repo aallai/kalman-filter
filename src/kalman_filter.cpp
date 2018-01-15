@@ -1,21 +1,23 @@
 #include "kalman_filter.h"
+#include "tools.h"
 #include <cmath>
 
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
+using namespace std;
 
 // Please note that the Eigen library does not initialize
 // VectorXd or MatrixXd objects with zeros upon creation.
 
 KalmanFilter::KalmanFilter() {
-  P_.setIdentity();
-  F_.setIdentity();
-  Q_.setIdentity();
+  P_.setIdentity(4, 4);
+  F_.setIdentity(4, 4);
+  Q_.setIdentity(4, 4);
 }
 
 KalmanFilter::~KalmanFilter() {}
 
-void KalmanFilter::Predict(long long delta_T) {
+void KalmanFilter::Predict(double delta_T) {
     F_ << 1, 0, delta_T , 0,
           0, 1, 0, delta_T,
           0, 0, 1, 0,
@@ -35,24 +37,26 @@ void KalmanFilter::Update(const VectorXd &z) {
 }
 
 void KalmanFilter::UpdateEKF(const VectorXd &z) {
-    // Project predicted state into polar coordinates.
-    double px = x_[0], py = x_[1], vx = x_[2], vy = x_[3];
+
+    // Map predicted state into polar coordinates.
+    double px = x_(0), py = x_(1), vx = x_(2), vy = x_(3);
     auto polar = VectorXd(3);
     polar(0) = sqrt((px*px) + py*py);
-    polar(1) = atan2(py, px); // divide by zero
-    polar(2) = (px*vx + py*vy) / sqrt(px*px+py*py); // divide by zero
+    polar(1) = atan2(py, px);
+    polar(2) = (px*vx + py*vy) / dbz_guard(sqrt(px*px+py*py));
 
     VectorXd innovation = z - polar;
 
     // Normalize angles.
-    innovation(1) = atan2(sin(innovation[1]), cos(innovation[1]));
+    innovation(1) = atan2(sin(innovation(1)), cos(innovation(1)));
 
     update(innovation);
 }
 
 void KalmanFilter::update(const VectorXd &innovation) {
-    auto S = R_ + H_ * P_ * H_.transpose();
-    auto K = P_ * H_.transpose() * S.inverse();
+    MatrixXd S = H_ * P_ * H_.transpose() + R_;
+    MatrixXd K = P_ * H_.transpose() * S.inverse();
+
     x_ += K * innovation;
     P_ -= K * H_ * P_;
 }
